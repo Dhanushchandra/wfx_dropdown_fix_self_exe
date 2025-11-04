@@ -1,0 +1,18 @@
+#dom-inspector {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 999999;
+    max-width: 300px;
+    font-family: Arial, sans-serif;
+  }
+  
+  .highlight {
+    outline: 2px solid red !important;
+    cursor: crosshair;
+  }

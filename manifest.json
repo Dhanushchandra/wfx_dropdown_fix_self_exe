@@ -1,0 +1,30 @@
+{
+    "manifest_version": 3,
+    "name": "Watfix Mirror Dropdown Fix",
+    "version": "1.1",
+    "description": "Inspect and Fix Mirror Dropdown Issue.",
+    "permissions": [
+        "storage"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://www.w3schools.com/*",
+                "http://127.0.0.1:5500/*",
+                "https://whatfix.com/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "styles.css"
+            ]
+        }
+    ]
+}
