@@ -3,8 +3,8 @@ let inspector;
 let lastHovered = null;
 let globalClickHandler = null;
 
-const popup = document.createElement('div');
-popup.id = 'mirror-popup';
+const popup = document.createElement("div");
+popup.id = "mirror-popup";
 popup.innerHTML = `
   <button data-action="head">Add mirror-flot-head</button>
   <button data-action="body">Add mirror-float-body</button>
@@ -13,7 +13,7 @@ popup.innerHTML = `
 document.body.appendChild(popup);
 
 // Basic styling
-const style = document.createElement('style');
+const style = document.createElement("style");
 style.textContent = `
   #mirror-popup {
     position: absolute;
@@ -43,7 +43,6 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
-
 
 let currentElement = null;
 
@@ -91,17 +90,17 @@ function showInfo(el) {
   if (inspector) inspector.innerHTML = `<b>${tag}${id}${cls}</b>`;
 }
 
-// ------------------- Handle Image Replacement -------------------
+// ------------------- Handle Click -------------------
 function handleClick(el) {
   if (!el) return;
 
   if (popup.contains(el)) return;
 
-  console.log(el)
+  console.log(el);
 
   // If clicking outside popup while it's open, close it
-  if (popup.style.display === 'block' && el.target !== currentElement) {
-    popup.style.display = 'none';
+  if (popup.style.display === "block" && el.target !== currentElement) {
+    popup.style.display = "none";
     currentElement = null;
     return;
   }
@@ -112,26 +111,125 @@ function handleClick(el) {
   const rect = currentElement.getBoundingClientRect();
   popup.style.top = `${rect.bottom + window.scrollY + 5}px`;
   popup.style.left = `${rect.left + window.scrollX}px`;
-  popup.style.display = 'block';
+  popup.style.display = "block";
 }
 
+let pairCounter = 0;
+const pairs = {}; // {1: {head: element|null, body: element|null}}
 
-popup.addEventListener('click', (e) => {
-  const action = e.target.getAttribute('data-action');
+const pairColors = {};
+const colorPalette = [
+  "#FF5733",
+  "#33B5FF",
+  "#33FF57",
+  "#FFC300",
+  "#9B33FF",
+  "#FF33A8",
+  "#33FFF9",
+  "#FF8F33",
+  "#33FF9F",
+  "#FF3333",
+];
+
+function getPairColor(id) {
+  if (!pairColors[id]) {
+    pairColors[id] = colorPalette[(id - 1) % colorPalette.length];
+  }
+  return pairColors[id];
+}
+
+function applyPairColor(element, id) {
+  const color = getPairColor(id);
+  element.style.outline = `3px solid ${color}`;
+  element.style.outlineOffset = "2px";
+}
+
+popup.addEventListener("click", (e) => {
+  const action = e.target.getAttribute("data-action");
   if (!currentElement || !action) return;
 
-  // Remove both attributes first
-  currentElement.removeAttribute('mirror-float-head');
-  currentElement.removeAttribute('mirror-float-body');
+  // Remove any previous head/body attributes
+  currentElement.removeAttribute("mirror-float-head");
+  currentElement.removeAttribute("mirror-float-body");
 
-  if (action === 'head') {
-    currentElement.setAttribute('mirror-float-head', 'true');
-  } else if (action === 'body') {
-    currentElement.setAttribute('mirror-float-body', 'true');
+  if (action === "clear") {
+    // Remove element from any existing pair
+    for (const id in pairs) {
+      if (pairs[id].head === currentElement) pairs[id].head = null;
+      if (pairs[id].body === currentElement) pairs[id].body = null;
+    }
+    currentElement.style.outline = "none";
+    popup.style.display = "none";
+    currentElement = null;
+    return;
   }
 
-  popup.style.display = 'none';
+  if (action === "head") {
+    // 1️⃣ Check if there’s an open head slot (head without body)
+    let openId = Object.keys(pairs).find(
+      (id) => pairs[id].head && !pairs[id].body
+    );
+
+    let assignedId;
+
+    if (openId) {
+      // Replace existing unpaired head with new element
+      if (pairs[openId].head && pairs[openId].head !== currentElement) {
+        pairs[openId].head.removeAttribute("mirror-float-head");
+        pairs[openId].head.style.outline = "none";
+      }
+      pairs[openId].head = currentElement;
+      currentElement.setAttribute("mirror-float-head", openId);
+      assignedId = openId;
+    } else {
+      // 2️⃣ Create new pair
+      pairCounter++;
+      pairs[pairCounter] = { head: currentElement, body: null };
+      currentElement.setAttribute("mirror-float-head", pairCounter);
+      assignedId = pairCounter;
+    }
+
+    // 🟡 Apply color border for this head
+    applyPairColor(currentElement, assignedId);
+  } else if (action === "body") {
+    // 3️⃣ Find the first pair that has a head but no body
+    let targetId = Object.keys(pairs).find(
+      (id) => pairs[id].head && !pairs[id].body
+    );
+
+    let assignedId;
+
+    if (targetId) {
+      pairs[targetId].body = currentElement;
+      currentElement.setAttribute("mirror-float-body", targetId);
+      assignedId = targetId;
+    } else {
+      // No open pair → create a new one
+      pairCounter++;
+      pairs[pairCounter] = { head: null, body: currentElement };
+      currentElement.setAttribute("mirror-float-body", pairCounter);
+      assignedId = pairCounter;
+    }
+
+    // 🟢 Apply color border for this body
+    applyPairColor(currentElement, assignedId);
+  }
+
+  popup.style.display = "none";
   currentElement = null;
+
+  console.log(
+    "Pairs:",
+    JSON.parse(
+      JSON.stringify(
+        Object.keys(pairs).map((id) => ({
+          id,
+          head: !!pairs[id].head,
+          body: !!pairs[id].body,
+        }))
+      )
+    )
+  );
 });
 
 // ------------------- Find first <img> in composedPath -------------------
@@ -230,6 +328,3 @@ chrome.storage.onChanged.addListener((changes) => {
     changes.enabled.newValue ? activateInspector() : deactivateInspector();
   }
 });
-
-
-
