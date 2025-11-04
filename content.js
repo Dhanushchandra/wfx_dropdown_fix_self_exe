@@ -60,11 +60,14 @@ function createInspector() {
 function highlight(el) {
   if (lastHovered && lastHovered !== el) {
     lastHovered.classList.remove("highlight");
-    lastHovered.style.outline = "";
+    // ✅ Restore its original outline color if part of a pair
+    restorePairOutline(lastHovered);
   }
+
   if (el) {
     el.classList.add("highlight");
-    el.style.outline = "2px solid red";
+    el.style.outline = "2px dashed red";
+    el.style.outlineOffset = "4px";
     lastHovered = el;
   }
 }
@@ -72,8 +75,21 @@ function highlight(el) {
 function removeHighlight() {
   if (lastHovered) {
     lastHovered.classList.remove("highlight");
-    lastHovered.style.outline = "";
+    // ✅ Restore pair outline if any
+    restorePairOutline(lastHovered);
     lastHovered = null;
+  }
+}
+
+// Helper: restores correct outline color if element is part of a pair
+function restorePairOutline(el) {
+  const headId = el.getAttribute("mirror-float-head");
+  const bodyId = el.getAttribute("mirror-float-body");
+  const pairId = headId || bodyId;
+  if (pairId) {
+    applyPairColor(el, pairId);
+  } else {
+    el.style.outline = "none";
   }
 }
 
@@ -148,12 +164,12 @@ popup.addEventListener("click", (e) => {
   const action = e.target.getAttribute("data-action");
   if (!currentElement || !action) return;
 
-  // Remove any previous head/body attributes
+  // Remove any mirror attributes from the clicked element
   currentElement.removeAttribute("mirror-float-head");
   currentElement.removeAttribute("mirror-float-body");
 
+  // 🔹 Clear button
   if (action === "clear") {
-    // Remove element from any existing pair
     for (const id in pairs) {
       if (pairs[id].head === currentElement) pairs[id].head = null;
       if (pairs[id].body === currentElement) pairs[id].body = null;
@@ -164,54 +180,87 @@ popup.addEventListener("click", (e) => {
     return;
   }
 
+  // 🔹 Add Head
   if (action === "head") {
-    // 1️⃣ Check if there’s an open head slot (head without body)
-    let openId = Object.keys(pairs).find(
+    let assignedId;
+
+    // 1️⃣ First look for a pair that has missing head
+    let missingHeadId = Object.keys(pairs).find((id) => !pairs[id].head);
+    // 2️⃣ Then check for open head without body
+    let openHeadId = Object.keys(pairs).find(
       (id) => pairs[id].head && !pairs[id].body
     );
 
-    let assignedId;
-
-    if (openId) {
-      // Replace existing unpaired head with new element
-      if (pairs[openId].head && pairs[openId].head !== currentElement) {
-        pairs[openId].head.removeAttribute("mirror-float-head");
-        pairs[openId].head.style.outline = "none";
+    if (missingHeadId) {
+      // Fill missing head in that pair
+      pairs[missingHeadId].head = currentElement;
+      currentElement.setAttribute("mirror-float-head", missingHeadId);
+      assignedId = missingHeadId;
+    } else if (openHeadId) {
+      // Replace unpaired head
+      const oldHead = pairs[openHeadId].head;
+      if (oldHead && oldHead !== currentElement) {
+        oldHead.removeAttribute("mirror-float-head");
+        oldHead.style.outline = "none";
       }
-      pairs[openId].head = currentElement;
-      currentElement.setAttribute("mirror-float-head", openId);
-      assignedId = openId;
+      pairs[openHeadId].head = currentElement;
+      currentElement.setAttribute("mirror-float-head", openHeadId);
+      assignedId = openHeadId;
     } else {
-      // 2️⃣ Create new pair
+      // Create new pair
       pairCounter++;
       pairs[pairCounter] = { head: currentElement, body: null };
       currentElement.setAttribute("mirror-float-head", pairCounter);
       assignedId = pairCounter;
     }
 
-    // 🟡 Apply color border for this head
     applyPairColor(currentElement, assignedId);
-  } else if (action === "body") {
-    // 3️⃣ Find the first pair that has a head but no body
-    let targetId = Object.keys(pairs).find(
-      (id) => pairs[id].head && !pairs[id].body
-    );
+  }
 
+  // 🔹 Add Body
+  else if (action === "body") {
     let assignedId;
 
-    if (targetId) {
-      pairs[targetId].body = currentElement;
-      currentElement.setAttribute("mirror-float-body", targetId);
-      assignedId = targetId;
+    // 1️⃣ Find pair that has a head but no body (perfect match)
+    let pairWithHeadOnly = Object.keys(pairs).find(
+      (id) => pairs[id].head && !pairs[id].body
+    );
+    // 2️⃣ If no such pair, find any pair missing a body
+    let missingBodyId = Object.keys(pairs).find((id) => !pairs[id].body);
+    // 3️⃣ Otherwise, fallback to last pair that has head (for replacement)
+    let lastHeadPairId = Object.keys(pairs)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .find((id) => pairs[id].head);
+
+    if (pairWithHeadOnly) {
+      // Pair with only head — perfect spot for new body
+      pairs[pairWithHeadOnly].body = currentElement;
+      currentElement.setAttribute("mirror-float-body", pairWithHeadOnly);
+      assignedId = pairWithHeadOnly;
+    } else if (missingBodyId) {
+      // Fill missing body (after clear)
+      pairs[missingBodyId].body = currentElement;
+      currentElement.setAttribute("mirror-float-body", missingBodyId);
+      assignedId = missingBodyId;
+    } else if (lastHeadPairId) {
+      // Replace existing body in the most recent head+body pair
+      const oldBody = pairs[lastHeadPairId].body;
+      if (oldBody && oldBody !== currentElement) {
+        oldBody.removeAttribute("mirror-float-body");
+        oldBody.style.outline = "none";
+      }
+      pairs[lastHeadPairId].body = currentElement;
+      currentElement.setAttribute("mirror-float-body", lastHeadPairId);
+      assignedId = lastHeadPairId;
     } else {
-      // No open pair → create a new one
+      // No pair at all → create a new body-only pair
       pairCounter++;
       pairs[pairCounter] = { head: null, body: currentElement };
       currentElement.setAttribute("mirror-float-body", pairCounter);
       assignedId = pairCounter;
     }
 
-    // 🟢 Apply color border for this body
     applyPairColor(currentElement, assignedId);
   }
 
@@ -220,15 +269,11 @@ popup.addEventListener("click", (e) => {
 
   console.log(
     "Pairs:",
-    JSON.parse(
-      JSON.stringify(
-        Object.keys(pairs).map((id) => ({
-          id,
-          head: !!pairs[id].head,
-          body: !!pairs[id].body,
-        }))
-      )
-    )
+    Object.keys(pairs).map((id) => ({
+      id,
+      head: !!pairs[id].head,
+      body: !!pairs[id].body,
+    }))
   );
 });
 
