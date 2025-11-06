@@ -5,11 +5,28 @@ let globalClickHandler = null;
 
 const popup = document.createElement("div");
 popup.id = "mirror-popup";
-popup.innerHTML = `
-  <button data-action="head">Add mirror-flot-head</button>
-  <button data-action="body">Add mirror-float-body</button>
-  <button data-action="clear">Clear attribute</button>
-`;
+function updatePopupButtons() {
+  if (!currentElement) return;
+
+  const headId = currentElement.getAttribute("mirror-float-head");
+  const bodyId = currentElement.getAttribute("mirror-float-body");
+  const pairId = headId || bodyId;
+
+  let canClear = false;
+
+  if (pairId && pairs[pairId]) {
+    const { head, body } = pairs[pairId];
+    // ✅ Only show Clear if both head and body exist
+    canClear = head && body;
+  }
+
+  popup.innerHTML = `
+    <button data-action="head">Add mirror-float-head</button>
+    <button data-action="body">Add mirror-float-body</button>
+    ${canClear ? `<button data-action="clear">Clear attribute</button>` : ""}
+  `;
+}
+
 document.body.appendChild(popup);
 
 // Basic styling
@@ -122,6 +139,8 @@ function handleClick(el) {
   }
 
   currentElement = el;
+
+  updatePopupButtons();
 
   // Get clicked element position
   const rect = currentElement.getBoundingClientRect();
